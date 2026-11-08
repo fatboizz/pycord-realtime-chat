@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Clone</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Server List Sidebar -->
+        <div class="servers-sidebar">
+            <div class="server-item home active">
+                <i class="fas fa-comments"></i>
+            </div>
+            <div class="server-separator"></div>
+            <div class="server-item add-server" onclick="showCreateGroupModal()">
+                <i class="fas fa-plus"></i>
+            </div>
+        </div>
+
+        <!-- Channel/DM List -->
+        <div class="channels-sidebar">
+            <div class="channels-header">
+                <h3>Direct Messages</h3>
+            </div>
+
+            <!-- DMs List -->
+            <div class="channel-list">
+                <div class="channel-category">
+                    <div class="category-header">
+                        <span>DIRECT MESSAGES</span>
+                        <button class="add-group" onclick="showAddFriendModal()" title="Add Friend">
+                            <i class="fas fa-user-plus"></i>
+                        </button>
+                    </div>
+                    <div class="users-list">
+                        {% for user in users %}
+                        <div class="user-item" onclick="selectFriend({{ user.id }}, '{{ user.username }}')" data-user-id="{{ user.id }}">
+                            <div class="user-avatar">
+                                {{ user.username[0] }}
+                            </div>
+                            <div class="user-info">
+                                <span class="username">{{ user.username }}</span>
+                                <span class="user-status" id="status-{{ user.id }}">
+                                    {{ user.status if user.status else 'Offline' }}
+                                </span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="channel-category">
+                    <div class="category-header">
+                        <span>GROUP CHATS</span>
+                        <button class="add-group" onclick="showCreateGroupModal()">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div id="groupsList" class="groups-list">
+                        <!-- Groups will be loaded here dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Profile -->
+            <div class="user-profile">
+                <div class="profile-info">
+                    <div class="user-avatar">{{ current_user.username[0] }}</div>
+                    <div class="user-details">
+                        <span class="username">{{ current_user.username }}</span>
+                        <span class="user-tag">#0001</span>
+                    </div>
+                </div>
+                <div class="profile-actions">
+                    <button class="action-btn">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                    <button class="action-btn">
+                        <i class="fas fa-headphones"></i>
+                    </button>
+                    <button class="action-btn" onclick="location.href='{{ url_for('auth.logout') }}'">
+                        <i class="fas fa-gear"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="chat-container">
+            <!-- Chat Header -->
+            <div class="chat-header">
+                <div class="chat-header-left">
+                    <i class="fas fa-user"></i>
+                    <h3 id="selectedUserName">Select a chat</h3>
+                </div>
+                <div class="chat-header-actions">
+                    <button class="action-btn video-call-btn" onclick="initiateVideoCall()" id="videoCallBtn" style="display: none;">
+                        <i class="fas fa-video"></i>
+                    </button>
+                    <button class="action-btn group-video-call-btn" onclick="startGroupVideoCall()" id="groupVideoCallBtn" style="display: none;">
+                        <i class="fas fa-users"></i>
+                        <i class="fas fa-video"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Messages Area -->
+            <div class="messages-container">
+                <div class="messages" id="messages"></div>
+                <div class="input-area">
+                    <input type="text" id="messageInput" placeholder="Type a message...">
+                    <button onclick="sendMessage()" class="send-button">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Group Modal -->
+    <div id="createGroupModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create a Group</h2>
+                <button onclick="closeCreateGroupModal()" class="close-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="groupName">GROUP NAME</label>
+                    <input type="text" id="groupName" placeholder="Enter group name">
+                </div>
+                <div class="form-group">
+                    <label>SELECT MEMBERS</label>
+                    <div id="membersList" class="members-selection">
+                        {% for user in users %}
+                        <div class="member-option">
+                            <input type="checkbox" class="member-checkbox" value="{{ user.id }}" id="member{{ user.id }}">
+                            <label for="member{{ user.id }}">
+                                <div class="user-avatar">{{ user.username[0] }}</div>
+                                <span class="username">{{ user.username }}</span>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeCreateGroupModal()" class="cancel-btn">Cancel</button>
+                <button onclick="createGroup()" class="create-btn">Create Group</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Thêm modal video call -->
+    <div id="videoCallModal" class="video-modal">
+        <div class="video-container">
+            <div class="video-grid">
+                <div class="video-wrapper">
+                    <video id="localVideo" autoplay muted playsinline></video>
+                    <div class="video-label">You</div>
+                </div>
+                <div class="video-wrapper">
+                    <video id="remoteVideo" autoplay playsinline></video>
+                    <div class="video-label">Remote User</div>
+                </div>
+            </div>
+            <div class="video-controls">
+                <button class="control-btn mic-btn" onclick="toggleMic()">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <button class="control-btn camera-btn" onclick="toggleCamera()">
+                    <i class="fas fa-video"></i>
+                </button>
+                <button class="control-btn end-call-btn" onclick="endVideoCall()">
+                    <i class="fas fa-phone-slash"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Thêm modal cho cuộc gọi đến -->
+    <div id="incomingCallModal" class="modal">
+        <div class="modal-content">
+            <h2>Incoming Video Call</h2>
+            <p id="callerName">Someone is calling...</p>
+            <div class="call-actions">
+                <button onclick="acceptCall()" class="accept-btn">
+                    <i class="fas fa-phone"></i> Accept
+                </button>
+                <button onclick="rejectCall()" class="reject-btn">
+                    <i class="fas fa-phone-slash"></i> Reject
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Group Video Call Modal -->
+    <div id="groupVideoCallModal" class="video-modal">
+        <div class="video-container">
+            <div id="groupVideoGrid" class="group-video-grid">
+                <div class="video-wrapper">
+                    <video id="localGroupVideo" autoplay muted playsinline></video>
+                    <div class="video-label">You</div>
+                </div>
+            </div>
+            <div class="video-controls">
+                <button class="control-btn mic-btn" onclick="toggleGroupMic()">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <button class="control-btn camera-btn" onclick="toggleGroupCamera()">
+                    <i class="fas fa-video"></i>
+                </button>
+                <button class="control-btn screen-share-btn" onclick="toggleScreenShare()">
+                    <i class="fas fa-desktop"></i>
+                </button>
+                <button class="control-btn end-call-btn" onclick="leaveGroupCall()">
+                    <i class="fas fa-phone-slash"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Thêm modal cho cuộc gọi nhóm đến -->
+    <div id="incomingGroupCallModal" class="modal">
+        <div class="modal-content">
+            <h2>Cuộc Gọi Nhóm</h2>
+            <p id="groupCallerName">Có người đang gọi...</p>
+            <div class="call-actions">
+                <button onclick="acceptGroupCall()" class="accept-btn">
+                    <i class="fas fa-phone"></i> Chấp nhận
+                </button>
+                <button onclick="rejectGroupCall()" class="reject-btn">
+                    <i class="fas fa-phone-slash"></i> Từ chối
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Friend & Requests Modal -->
+    <div id="addFriendModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Friends & Requests</h2>
+                <button onclick="closeAddFriendModal()" class="close-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="searchInput">SEARCH USER (USERNAME OR EMAIL)</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="searchInput" placeholder="Enter username or email...">
+                        <button onclick="searchUsers()" class="create-btn" style="width: auto; padding: 0 16px;">Search</button>
+                    </div>
+                </div>
+                <div id="searchResults" class="search-results" style="margin-top: 15px;"></div>
+                
+                <hr style="border: 0; border-top: 1px solid #3f4147; margin: 20px 0;">
+                
+                <h3>Pending Friend Requests</h3>
+                <div id="friendRequests" class="friend-requests-list" style="margin-top: 10px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeAddFriendModal()" class="cancel-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const currentUserId = {{ session['user_id'] }};
+        const currentUsername = "{{ current_user.username }}";
+        const socket = io();
+        
+        socket.on('connect', () => {
+            console.log('Socket connected');
+        });
+        
+        socket.on('error', (error) => {
+            console.error('Socket error:', error);
+        });
+
+        function showAddFriendModal() {
+            const modal = document.getElementById('addFriendModal');
+            if (modal) {
+                modal.style.display = 'block';
+                if (typeof loadFriendRequests === 'function') {
+                    loadFriendRequests();
+                }
+            }
+        }
+
+        function closeAddFriendModal() {
+            const modal = document.getElementById('addFriendModal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+    </script>
+    <script src="{{ url_for('static', filename='js/friend.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/group.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/videocall.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/group-call.js') }}"></script>
+</body>
+</html>

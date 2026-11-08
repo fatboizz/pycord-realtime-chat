@@ -1,0 +1,7 @@
+-r requirements.txt
+
+# Linting & Code Quality
+flake8>=7.0.0
+black>=24.0.0
+pytest>=8.0.0
+
